@@ -1,0 +1,21 @@
+# ═══════════════════════════════════════════════════════════
+# NUMERUS - Render Blueprint (deploy automático)
+#
+# Como usar:
+# 1. Suba o conteúdo da pasta "numerus-game" para um repositório GitHub
+#    (server/, client/, este arquivo e o package.json na raiz)
+# 2. No Render: New → Blueprint → conecte seu repositório
+# 3. O Render detecta este arquivo e configura tudo sozinho
+# ═══════════════════════════════════════════════════════════
+
+services:
+  - type: web
+    name: numerus-game
+    runtime: node
+    plan: free
+    buildCommand: npm run build
+    startCommand: npm start
+    healthCheckPath: /api/rooms
+    envVars:
+      - key: NODE_ENV
+        value: production

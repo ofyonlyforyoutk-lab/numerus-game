@@ -1,0 +1,34 @@
+{
+  "name": "numerus-game",
+  "version": "1.0.0",
+  "description": "NUMERUS - Master the Equation: jogo de cartas multiplayer de estratégia e matemática",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node server/index.js",
+    "build": "cd client && npm install && npm run build",
+    "test": "node test-equation.js && node test-cpu-game.js"
+  },
+  "keywords": [
+    "game",
+    "card-game",
+    "socket.io",
+    "multiplayer",
+    "math"
+  ],
+  "author": "Emerson Donato de Godoi & Yasmin de Godoi",
+  "license": "ISC",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "socket.io": "^4.8.3",
+    "uuid": "^14.0.1"
+  },
+  "devDependencies": {
+    "socket.io-client": "^4.7.2"
+  }
+}
