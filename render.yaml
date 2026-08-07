@@ -13,9 +13,17 @@ services:
     name: numerus-game
     runtime: node
     plan: free
-    buildCommand: npm run build
+    branch: main
+    # ⚠️ IMPORTANTE: no Render, o buildCommand é o ÚNICO comando de build.
+    # Ele precisa instalar as dependências da RAIZ (express/socket.io)
+    # ANTES do build do cliente. O npm install no início é obrigatório!
+    buildCommand: npm install && npm run build
     startCommand: npm start
     healthCheckPath: /api/rooms
     envVars:
       - key: NODE_ENV
         value: production
+      - key: NODE_VERSION
+        value: "20.18.0"
+      - key: GENERATE_SOURCEMAP
+        value: "false"
