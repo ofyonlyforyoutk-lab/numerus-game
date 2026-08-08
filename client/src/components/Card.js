@@ -1,6 +1,7 @@
 import React from 'react';
 import { NumberCardArt, OperationCardArt, SpecialCardArt, CardBackArt } from '../assets/CardArt';
 import { PDFCardBackArt } from '../assets/PDFCardArt';
+import GENERATED from '../assets/generated';
 
 function Card({ card, onClick, selected, small, className = '', style }) {
   if (!card) return null;
@@ -41,6 +42,22 @@ function Card({ card, onClick, selected, small, className = '', style }) {
 }
 
 export function CardBack({ width, height, className = '', usePDFArt = false }) {
+  // Arte gerada (Pollinations) tem prioridade quando existe
+  const generated = GENERATED['card-back'];
+  if (generated) {
+    return (
+      <div
+        className={`card-back-art ${className}`}
+        style={{ width, height, borderRadius: 6, overflow: 'hidden' }}
+      >
+        <img
+          src={generated}
+          alt="Verso da carta"
+          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+        />
+      </div>
+    );
+  }
   if (usePDFArt) {
     return <PDFCardBackArt width={width} height={height} className={className} />;
   }

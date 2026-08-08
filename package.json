@@ -7,7 +7,9 @@
     "start": "node server/index.js",
     "dev": "node server/index.js",
     "build": "cd client && npm install && npm run build",
-    "test": "node test-equation.js && node test-cpu-game.js"
+    "test": "node test-equation.js && node test-cpu-game.js",
+    "generate:art": "node scripts/generate-art.js",
+    "telegram:bridge": "node scripts/telegram-bridge.js"
   },
   "keywords": [
     "game",

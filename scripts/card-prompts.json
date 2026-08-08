@@ -1,0 +1,17 @@
+[
+  {
+    "file": "art-sqrt.png",
+    "prompt": "Mystical emerald-green fantasy playing card, medieval arcane art, a large glowing golden square root symbol √ in the center, surrounded by ancient green runes, ivy and arcane mathematics glyphs, dark parchment background with golden ornamental border, magical math tome aesthetic, dramatic candlelight, intricate detail, high fantasy trading card art style, vertical portrait card composition, no text",
+    "seed": 101
+  },
+  {
+    "file": "art-multiply.png",
+    "prompt": "Mystical deep-purple fantasy playing card, medieval arcane art, a large glowing golden multiplication symbol × in the center with swirling celestial energy and stars, surrounded by arcane purple runes and floating numbers, dark parchment background with golden ornamental border, magical mathematics aesthetic, dramatic lighting, intricate detail, high fantasy trading card art style, vertical portrait card composition, no text",
+    "seed": 202
+  },
+  {
+    "file": "art-card-back.png",
+    "prompt": "Ornate medieval card back design, dark aged parchment with a large golden letter N emblem in the center inside a circle of gold filigree, intricate ornamental diamond and scrollwork patterns in corners, symmetrical geometric decoration, aged leather texture, gold foil accents on dark brown background, luxurious fantasy trading card back, high detail, vertical portrait card composition, no text",
+    "seed": 303
+  }
+]

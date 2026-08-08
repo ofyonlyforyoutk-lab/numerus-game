@@ -30,6 +30,9 @@ extracted_card_*.png
 # Banco de dados local (fallback sem DATABASE_URL)
 server/data.json
 
+# Inbox da ponte do Telegram (mensagens pessoais NÃO vão pro GitHub)
+inbox/
+
 # Variáveis de ambiente
 .env
 .env.local

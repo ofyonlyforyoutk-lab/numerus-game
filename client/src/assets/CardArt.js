@@ -1,8 +1,10 @@
 import React, { useId } from 'react';
+import GENERATED from './generated';
 
 /**
  * SVG Card Art - Medieval themed cards matching the Numerus PDF aesthetic.
  * Renders beautiful vector cards for numbers, operations, and specials.
+ * Quando uma arte gerada (Pollinations) existir no manifesto, ela substitui o SVG.
  */
 
 // Stable gradient ID helper (deterministic per instance via useId)
@@ -172,6 +174,18 @@ export function OperationCardArt({ operation, width = 80, height = 112 }) {
 export function SpecialCardArt({ operation, width = 80, height = 112 }) {
   const isSqrt = operation === 'sqrt';
   const id = useGradId(`sp-${operation}`);
+  const generated = GENERATED[isSqrt ? 'sqrt' : 'multiply'];
+  if (generated) {
+    return (
+      <div style={{ width, height, borderRadius: 8, overflow: 'hidden' }}>
+        <img
+          src={generated}
+          alt={isSqrt ? 'Raiz Quadrada (√)' : 'Multiplicação (×)'}
+          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+        />
+      </div>
+    );
+  }
   const symbol = isSqrt ? '√' : '×';
   const name = isSqrt ? 'RAIZ' : 'MULT.';
   const c1 = isSqrt ? '#1a4a1a' : '#3a1a4a';
@@ -229,6 +243,18 @@ export function SpecialCardArt({ operation, width = 80, height = 112 }) {
  */
 export function CardBackArt({ width = 80, height = 112 }) {
   const id = useGradId('back');
+  const generated = GENERATED['card-back'];
+  if (generated) {
+    return (
+      <div style={{ width, height, borderRadius: 8, overflow: 'hidden' }}>
+        <img
+          src={generated}
+          alt="Verso da carta"
+          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+        />
+      </div>
+    );
+  }
   return (
     <svg width={width} height={height} viewBox="0 0 100 140" xmlns="http://www.w3.org/2000/svg">
       <defs>
