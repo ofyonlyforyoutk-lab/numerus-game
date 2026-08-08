@@ -234,14 +234,14 @@ function evaluateWithPrecedence(tokens) {
 // GAME STATE CREATION
 // ═══════════════════════════════════════════════════════════════
 
-function createGameState(roomId, playerIds, settings = {}) {
+function createGameState(roomId, playerIds, settings = {}, names = {}) {
   const deck = shuffleDeck(createDeck());
   
   const players = {};
   for (const playerId of playerIds) {
     players[playerId] = {
       id: playerId,
-      name: `Jogador ${playerId.substring(0, 4)}`,
+      name: names[playerId] || `Jogador ${playerId.substring(0, 4)}`,
       chips: STARTING_CHIPS,
       hand: [],
       faceDown: [],

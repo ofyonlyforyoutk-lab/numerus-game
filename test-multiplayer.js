@@ -42,14 +42,23 @@ async function main() {
   let gameOver = null;
   p1.socket.on('game_over', (r) => { gameOver = r; });
 
-  // Create + join
-  const createRes = await new Promise(resolve => p1.socket.emit('create_room', {}, resolve));
+  // Track lobby updates to check player names
+  let lastUpdate = null;
+  p1.socket.on('room_update', (d) => { lastUpdate = d; });
+
+  // Create + join (with custom names)
+  const createRes = await new Promise(resolve => p1.socket.emit('create_room', { name: 'Jogador 1' }, resolve));
   assert(createRes.success, `Sala criada: ${createRes.roomId}`);
   const roomId = createRes.roomId;
 
-  const joinRes = await new Promise(resolve => p2.socket.emit('join_room', { roomId }, resolve));
+  const joinRes = await new Promise(resolve => p2.socket.emit('join_room', { roomId, name: 'Jogador 2' }, resolve));
   assert(joinRes.success, 'Jogador 2 entrou na sala');
   assert(joinRes.host === p1.socket.id, 'Anfitrião informado ao entrar na sala');
+
+  await wait(300);
+  const namesInLobby = lastUpdate?.players?.map(p => p.name) || [];
+  assert(namesInLobby.includes('Jogador 1') && namesInLobby.includes('Jogador 2'),
+    'Nomes personalizados aparecem na sala');
 
   // Only the host can start the game — the joiner must be rejected
   const nonHostStart = await new Promise(resolve => p2.socket.emit('start_game', {}, resolve));
@@ -62,6 +71,11 @@ async function main() {
   await wait(700);
   assert(p1.latest && p2.latest, 'Ambos receberam game_state (rodada 1 - auto-avanço)');
   if (p1.latest) console.log(`  ℹ️  Rodada atual após start: ${p1.latest.currentRound + 1}/10 (${p1.latest.currentRound === 1 ? 'avançou do Despertar' : 'TRAVOU no Despertar'})`);
+  if (p1.latest) {
+    const gameNames = Object.values(p1.latest.players).map(p => p.name);
+    assert(gameNames.includes('Jogador 1') && gameNames.includes('Jogador 2'),
+      'Nomes personalizados aparecem no jogo');
+  }
 
   // ── Play all rounds ──
   let iterations = 0;

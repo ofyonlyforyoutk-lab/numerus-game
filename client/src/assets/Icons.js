@@ -241,4 +241,73 @@ export function SparkleIcon({ size = 16, color = '#e8d48b' }) {
   );
 }
 
+/** Key (account) */
+export function KeyIcon({ size = 24 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="8" cy="15" r="4" fill="none" stroke="#c9a84c" strokeWidth="2" />
+      <line x1="11" y1="12" x2="20" y2="3" stroke="#c9a84c" strokeWidth="2" strokeLinecap="round" />
+      <line x1="16" y1="7" x2="18" y2="9" stroke="#c9a84c" strokeWidth="2" strokeLinecap="round" />
+      <line x1="18" y1="5" x2="20" y2="7" stroke="#c9a84c" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** Map / journey (story mode) */
+export function MapIcon({ size = 28 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
+      <path d="M5 4 L10 7 L18 4 L23 7 V24 L18 21 L10 24 L5 21 Z"
+        fill="none" stroke="#c9a84c" strokeWidth="1.6" strokeLinejoin="round" />
+      <path d="M10 7 V24 M18 4 V21" stroke="#c9a84c" strokeWidth="1" opacity="0.5" />
+      <circle cx="14" cy="14" r="2" fill="#e8d48b" />
+      <circle cx="14" cy="14" r="4.5" fill="none" stroke="#e8d48b" strokeWidth="0.8" opacity="0.6" />
+    </svg>
+  );
+}
+
+/** Star (chapter rating) */
+export function StarIcon({ size = 20, filled = true, color = '#e8d48b' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+      <path d="M10 1.5 L12.4 6.6 L18 7.3 L13.9 11.2 L14.9 16.7 L10 14 L5.1 16.7 L6.1 11.2 L2 7.3 L7.6 6.6 Z"
+        fill={filled ? color : 'none'} stroke="#8b6914" strokeWidth="1" opacity={filled ? 1 : 0.4} />
+    </svg>
+  );
+}
+
+/** Lock (locked chapter) */
+export function LockIcon({ size = 20 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+      <rect x="4" y="9" width="12" height="8" rx="1.5" fill="none" stroke="#8a7a5a" strokeWidth="1.5" />
+      <path d="M6.5 9 V6 A3.5 3.5 0 0 1 13.5 6 V9" fill="none" stroke="#8a7a5a" strokeWidth="1.5" />
+      <circle cx="10" cy="13" r="1.2" fill="#8a7a5a" />
+    </svg>
+  );
+}
+
+/** Logout */
+export function LogoutIcon({ size = 18 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+      <path d="M7 3 H4 A1.5 1.5 0 0 0 2.5 4.5 V15.5 A1.5 1.5 0 0 0 4 17 H7"
+        fill="none" stroke="#c9a84c" strokeWidth="1.5" strokeLinecap="round" />
+      <line x1="9" y1="10" x2="17" y2="10" stroke="#c9a84c" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M14 7 L17 10 L14 13" fill="none" stroke="#c9a84c" strokeWidth="1.5"
+        strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/** Close X */
+export function CloseIcon({ size = 18 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+      <line x1="4" y1="4" x2="16" y2="16" stroke="#c9a84c" strokeWidth="2" strokeLinecap="round" />
+      <line x1="16" y1="4" x2="4" y2="16" stroke="#c9a84c" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export default CoinIcon;

@@ -26,3 +26,10 @@ test-output/
 
 # Artefatos de extração de cartas
 extracted_card_*.png
+
+# Banco de dados local (fallback sem DATABASE_URL)
+server/data.json
+
+# Variáveis de ambiente
+.env
+.env.local

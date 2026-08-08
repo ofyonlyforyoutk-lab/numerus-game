@@ -1,16 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import DifficultySelector from './DifficultySelector';
 import Codex from './Codex';
-import { SwordsIcon, GlobeIcon, DoorIcon, BackArrowIcon, BookIcon } from '../assets/Icons';
+import AuthModal from './AuthModal';
+import { SwordsIcon, GlobeIcon, DoorIcon, BackArrowIcon, BookIcon, MapIcon, KeyIcon, LogoutIcon, CrownIcon } from '../assets/Icons';
 import { sound } from '../utils/sound';
 
-function AnimatedMenu({ onStartGame, onStartOnline, onJoinRoom }) {
+function AnimatedMenu({ onStartGame, onStartOnline, onJoinRoom, onStartStory, user, onLoginSuccess, onLogout }) {
   const [view, setView] = useState('main'); // main, difficulty, online, join
   const [selectedDifficulty, setSelectedDifficulty] = useState(null);
   const [joinCode, setJoinCode] = useState('');
   const [particles, setParticles] = useState([]);
   const [soundOn, setSoundOn] = useState(true);
   const [showCodex, setShowCodex] = useState(false);
+  const [showAuth, setShowAuth] = useState(false);
 
   useEffect(() => {
     const newParticles = Array.from({ length: 15 }, (_, i) => ({
@@ -80,6 +82,80 @@ function AnimatedMenu({ onStartGame, onStartOnline, onJoinRoom }) {
     </div>
   );
 
+  const AccountChip = () => (
+    <div
+      style={{
+        position: 'fixed',
+        top: '1.2rem',
+        left: '1.2rem',
+        zIndex: 100,
+        display: 'flex',
+        alignItems: 'center',
+        gap: '0.6rem'
+      }}
+    >
+      {user ? (
+        <>
+          <div
+            style={{
+              background: 'rgba(20, 12, 8, 0.85)',
+              border: '1px solid rgba(201, 168, 76, 0.4)',
+              borderRadius: '8px',
+              padding: '0.4rem 0.9rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              color: 'var(--gold-light)'
+            }}
+            title={`${user.username} — ${user.profile?.title || 'Aprendiz'}`}
+          >
+            <CrownIcon size={18} />
+            <span style={{ fontFamily: 'Cinzel', fontSize: '0.9rem' }}>{user.displayName}</span>
+            <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+              {user.profile?.title || 'Aprendiz'}
+            </span>
+          </div>
+          <button
+            onClick={() => { sound.click(); onLogout(); }}
+            title="Sair da conta"
+            style={{
+              background: 'rgba(20, 12, 8, 0.85)',
+              border: '1px solid rgba(201, 168, 76, 0.3)',
+              borderRadius: '50%',
+              width: 40,
+              height: 40,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
+            <LogoutIcon size={18} />
+          </button>
+        </>
+      ) : (
+        <button
+          onClick={() => { sound.click(); setShowAuth(true); }}
+          title="Entrar ou criar conta"
+          style={{
+            background: 'rgba(20, 12, 8, 0.85)',
+            border: '1px solid rgba(201, 168, 76, 0.35)',
+            borderRadius: '8px',
+            padding: '0.4rem 0.9rem',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            color: 'var(--gold-light)',
+            fontFamily: 'Cinzel'
+          }}
+        >
+          <KeyIcon size={18} /> Entrar
+        </button>
+      )}
+    </div>
+  );
+
   const SoundButton = () => (
     <button
       onClick={toggleSound}
@@ -123,6 +199,7 @@ function AnimatedMenu({ onStartGame, onStartOnline, onJoinRoom }) {
       <div className="main-menu" style={{ position: 'relative' }}>
         <Particles />
         <SoundButton />
+        <AccountChip />
 
         {/* Manual cover as backdrop */}
         <div
@@ -153,6 +230,18 @@ function AnimatedMenu({ onStartGame, onStartOnline, onJoinRoom }) {
             </span>
             Jogar vs CPU
             <span className="btn-desc">Duelo contra a inteligência artificial</span>
+          </button>
+
+          <button
+            className="menu-btn"
+            onClick={() => handleNavigate(() => onStartStory())}
+            onMouseEnter={() => sound.hover()}
+          >
+            <span className="btn-icon" style={{ display: 'inline-flex', verticalAlign: 'middle', marginRight: '0.6rem' }}>
+              <MapIcon size={24} />
+            </span>
+            Modo História
+            <span className="btn-desc">A Jornada dos Dez Círculos — campanha com saves</span>
           </button>
 
           <button
@@ -206,6 +295,12 @@ function AnimatedMenu({ onStartGame, onStartOnline, onJoinRoom }) {
         </p>
 
         {showCodex && <Codex onClose={() => setShowCodex(false)} />}
+        {showAuth && (
+          <AuthModal
+            onClose={() => setShowAuth(false)}
+            onAuthed={(token, authedUser) => { setShowAuth(false); onLoginSuccess(token, authedUser); }}
+          />
+        )}
       </div>
     );
   }

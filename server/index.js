@@ -17,6 +17,8 @@ const {
   calculateFinalResults,
   ROUNDS
 } = require('./game-logic');
+const store = require('./store');
+const auth = require('./auth');
 
 const app = express();
 const server = http.createServer(app);
@@ -48,6 +50,7 @@ function createRoom(roomId, settings = {}) {
     id: roomId,
     players: [],
     host: null,
+    names: {},
     game: null,
     settings: {
       maxPlayers: settings.maxPlayers || 6,
@@ -58,6 +61,16 @@ function createRoom(roomId, settings = {}) {
   };
   rooms.set(roomId, room);
   return room;
+}
+
+/** Payload for room_update with player names. */
+function roomUpdatePayload(room) {
+  return {
+    roomId: room.id,
+    players: room.players.map((id, i) => ({ id, name: room.names[id] || `Jogador ${i + 1}` })),
+    settings: room.settings,
+    host: room.host
+  };
 }
 
 function advanceChained(gameState) {    // Auto-advance through rounds that are already complete (e.g. final judgment)
@@ -105,12 +118,7 @@ function handlePlayerLeave(room, roomId, playerId) {
     return;
   }
 
-  io.to(roomId).emit('room_update', {
-    roomId,
-    players: room.players,
-    settings: room.settings,
-    host: room.host
-  });
+  io.to(roomId).emit('room_update', roomUpdatePayload(room));
 }
 
 function broadcastGameState(roomId) {
@@ -167,18 +175,14 @@ io.on('connection', (socket) => {
     const roomId = data.roomId || `numerus-${Math.random().toString(36).substr(2, 6)}`;
     const room = createRoom(roomId, data.settings);
     room.host = socket.id;
+    room.names[socket.id] = (data.name || '').trim().slice(0, 20) || null;
     room.players.push(socket.id);
     socket.join(roomId);
     currentRoom = roomId;
 
     console.log(`🏠 Room created: ${roomId} by ${socket.id}`);
     callback({ success: true, roomId, playerId: socket.id, host: room.host });
-    io.to(roomId).emit('room_update', {
-      roomId,
-      players: room.players,
-      settings: room.settings,
-      host: room.host
-    });
+    io.to(roomId).emit('room_update', roomUpdatePayload(room));
   });
 
   // ─── Join Room ────────────────────────────────────────────
@@ -194,18 +198,14 @@ io.on('connection', (socket) => {
       return callback({ success: false, error: 'Jogo já começou' });
     }
 
+    room.names[socket.id] = (data.name || '').trim().slice(0, 20) || null;
     room.players.push(socket.id);
     socket.join(data.roomId);
     currentRoom = data.roomId;
 
     console.log(`🚪 Player ${socket.id} joined room ${data.roomId}`);
     callback({ success: true, roomId: data.roomId, playerId: socket.id, host: room.host });
-    io.to(data.roomId).emit('room_update', {
-      roomId: data.roomId,
-      players: room.players,
-      settings: room.settings,
-      host: room.host
-    });
+    io.to(data.roomId).emit('room_update', roomUpdatePayload(room));
   });
 
   // ─── Start Game ───────────────────────────────────────────
@@ -223,7 +223,7 @@ io.on('connection', (socket) => {
     }
 
     // Create game state
-    room.game = createGameState(currentRoom, room.players, room.settings);
+    room.game = createGameState(currentRoom, room.players, room.settings, room.names);
     
     if (!startGame(room.game)) {
       return callback({ success: false, error: 'Erro ao iniciar jogo' });
@@ -309,6 +309,75 @@ app.get('/api/rooms', (req, res) => {
   res.json(roomList);
 });
 
+// ═══════════════════════════════════════════════════════════════
+// AUTH & PROFILE API
+// ═══════════════════════════════════════════════════════════════
+
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    const result = await auth.register(req.body || {});
+    if (!result.success) return res.status(400).json(result);
+    res.json(result);
+  } catch (e) {
+    console.error('register error:', e.message);
+    res.status(500).json({ success: false, error: 'Erro interno ao criar conta' });
+  }
+});
+
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const result = await auth.login(req.body || {});
+    if (!result.success) return res.status(401).json(result);
+    res.json(result);
+  } catch (e) {
+    console.error('login error:', e.message);
+    res.status(500).json({ success: false, error: 'Erro interno ao entrar' });
+  }
+});
+
+app.post('/api/auth/logout', async (req, res) => {
+  const header = req.headers.authorization || '';
+  const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+  await auth.logout(token);
+  res.json({ success: true });
+});
+
+app.get('/api/auth/me', async (req, res) => {
+  const header = req.headers.authorization || '';
+  const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+  const user = await auth.me(token);
+  if (!user) return res.status(401).json({ success: false, error: 'Sessão inválida' });
+  res.json({ success: true, user });
+});
+
+// Story progress (requires login)
+app.get('/api/profile', auth.requireAuth, async (req, res) => {
+  res.json({ success: true, user: auth.publicUser(req.auth.user, req.auth.profile) });
+});
+
+app.post('/api/story/complete', auth.requireAuth, async (req, res) => {
+  const { chapterId, stars, won } = req.body || {};
+  const id = parseInt(chapterId, 10);
+  if (!Number.isInteger(id) || id < 1 || id > 12) {
+    return res.status(400).json({ success: false, error: 'Capítulo inválido' });
+  }
+  // Anti-cheat: only the current or next chapter can be completed
+  const profile = await store.getProfile(req.auth.user.id);
+  const completedCount = Object.keys(profile.completed || {}).length;
+  if (id > completedCount + 1) {
+    return res.status(403).json({ success: false, error: 'Este círculo ainda está bloqueado' });
+  }
+  const s = Math.max(0, Math.min(3, Math.round(parseInt(stars, 10) || 0)));
+  const w = !!won;
+  try {
+    const updated = await store.updateStoryResult(req.auth.user.id, { chapterId: id, stars: s, won: w });
+    res.json({ success: true, profile: auth.publicUser(req.auth.user, updated).profile });
+  } catch (e) {
+    console.error('story/complete error:', e.message);
+    res.status(500).json({ success: false, error: 'Erro ao salvar progresso' });
+  }
+});
+
 // Serve React app for all other routes
 app.get('/{*path}', (req, res) => {
   res.sendFile(path.join(__dirname, '../client/build', 'index.html'));
@@ -319,8 +388,15 @@ app.get('/{*path}', (req, res) => {
 // ═══════════════════════════════════════════════════════════════
 
 const PORT = process.env.PORT || 3001;
-server.listen(PORT, () => {
-  console.log(`\n⚔️  NUMERUS Server running on port ${PORT}`);
-  console.log(`   📡 Socket.io ready`);
-  console.log(`   🎮 Waiting for players...\n`);
-});
+store.init()
+  .then(() => {
+    server.listen(PORT, () => {
+      console.log(`\n⚔️  NUMERUS Server running on port ${PORT}`);
+      console.log(`   📡 Socket.io ready`);
+      console.log(`   🎮 Waiting for players...\n`);
+    });
+  })
+  .catch((err) => {
+    console.error('Falha ao inicializar armazenamento:', err.message);
+    process.exit(1);
+  });

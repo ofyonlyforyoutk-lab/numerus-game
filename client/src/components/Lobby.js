@@ -1,10 +1,16 @@
-import React, { useState } from 'react';
-import { SwordsIcon, DoorIcon, BackArrowIcon, GlobeIcon, BookIcon } from '../assets/Icons';
+import React, { useState, useEffect } from 'react';
+import { SwordsIcon, DoorIcon, BackArrowIcon, GlobeIcon, BookIcon, ScrollIcon } from '../assets/Icons';
 import { sound } from '../utils/sound';
 
 function Lobby({ roomId, playerId, host, players, onCreateRoom, onJoinRoom, onStartGame, onBackToMenu, error }) {
   const [joinId, setJoinId] = useState('');
   const [loading, setLoading] = useState(false);
+  const [name, setName] = useState(() => localStorage.getItem('numerus_player_name') || '');
+
+  // Persist the chosen name so every room/game uses it
+  useEffect(() => {
+    localStorage.setItem('numerus_player_name', name);
+  }, [name]);
 
   const handleCreate = () => {
     setLoading(true);
@@ -56,12 +62,17 @@ function Lobby({ roomId, playerId, host, players, onCreateRoom, onJoinRoom, onSt
             {players.length} jogador(es) na sala
           </div>
           <div className="players-list">
-            {players.map((p, i) => (
-              <span key={p} className={`player-tag ${p === playerId ? 'me' : ''}`}>
-                {p === playerId ? '✦ Você' : p === host ? '✦ Anfitrião' : `Jogador ${i + 1}`}
+            {players.map((p) => (
+              <span key={p.id} className={`player-tag ${p.id === playerId ? 'me' : ''}`}>
+                {p.id === playerId ? '✦ Você' : p.id === host ? '✦ Anfitrião' : (p.name || 'Jogador')}
               </span>
             ))}
           </div>
+          {name && (
+            <div className="room-your-name">
+              Você joga como: <strong>{name}</strong>
+            </div>
+          )}
         </div>
 
         {players.length < 2 ? (
@@ -108,6 +119,20 @@ function Lobby({ roomId, playerId, host, players, onCreateRoom, onJoinRoom, onSt
   return (
     <div className="lobby animate-in">
       <h2>Entrar na Ordem</h2>
+
+      <div className="lobby-input">
+        <label>Seu Nome <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>(aparece para os outros jogadores)</span></label>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <ScrollIcon size={18} />
+          <input
+            type="text"
+            placeholder="Digite seu nome..."
+            value={name}
+            onChange={(e) => setName(e.target.value.slice(0, 20))}
+            maxLength={20}
+          />
+        </div>
+      </div>
 
       <div className="lobby-input">
         <label>Criar Nova Sala</label>

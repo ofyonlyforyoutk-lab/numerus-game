@@ -201,9 +201,10 @@ function cpuDecide(destiny, hand, difficulty) {
  * Main game engine
  */
 export class CPUGameEngine {
-  constructor(playerCount = 2, difficulty = 'estrategista') {
+  constructor(playerCount = 2, difficulty = 'estrategista', options = {}) {
     this.playerCount = Math.min(playerCount, 6);
     this.difficulty = difficulty;
+    this.options = options; // { humanName, cpuNames: [], cpuChipsBonus }
     this.humanPlayerId = 'human-player';
     this.cpuPlayers = [];
     this.gameState = null;
@@ -219,7 +220,11 @@ export class CPUGameEngine {
     const playerIds = [this.humanPlayerId];
     
     // Create CPU players
-    const names = CPU_NAMES[this.difficulty] || CPU_NAMES.estrategista;
+    const defaultNames = CPU_NAMES[this.difficulty] || CPU_NAMES.estrategista;
+    const names = (this.options.cpuNames && this.options.cpuNames.length)
+      ? this.options.cpuNames
+      : defaultNames;
+    const cpuChipsBonus = this.options.cpuChipsBonus || 0;
     for (let i = 1; i < this.playerCount; i++) {
       const cpuId = `cpu-${i}`;
       playerIds.push(cpuId);
@@ -253,8 +258,8 @@ export class CPUGameEngine {
     for (const id of playerIds) {
       this.gameState.players[id] = {
         id,
-        name: id === this.humanPlayerId ? 'Você' : this.cpuPlayers.find(p => p.id === id)?.name || id,
-        chips: STARTING_CHIPS,
+        name: id === this.humanPlayerId ? (this.options.humanName || 'Você') : this.cpuPlayers.find(p => p.id === id)?.name || id,
+        chips: id === this.humanPlayerId ? STARTING_CHIPS : STARTING_CHIPS + (this.options.cpuChipsBonus || 0),
         hand: [],
         faceDown: [],
         operations: [],

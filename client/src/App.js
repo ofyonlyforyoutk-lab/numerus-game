@@ -4,13 +4,18 @@ import AnimatedMenu from './components/AnimatedMenu';
 import Lobby from './components/Lobby';
 import GameBoard from './components/GameBoard';
 import Results from './components/Results';
+import StoryHub from './components/StoryHub';
+import StoryResult from './components/StoryResult';
 import { CPUGameEngine } from './cpu-game-engine';
 import { sound } from './utils/sound';
+import { STORY_TITLES, MAX_CHAPTERS, STORY_LOCAL_KEY, defaultProgress, CHAPTERS } from './story/campaign';
 import './App.css';
 
 const SERVER_URL = window.location.hostname === 'localhost'
   ? 'http://localhost:3001'
   : window.location.origin;
+
+const API = SERVER_URL;
 
 function App() {
   // Connection state
@@ -18,7 +23,7 @@ function App() {
   const [connected, setConnected] = useState(false);
 
   // Game mode
-  const [gameMode, setGameMode] = useState(null); // 'menu', 'lobby', 'cpu', 'online'
+  const [gameMode, setGameMode] = useState(null); // 'menu', 'lobby', 'cpu', 'online', 'story', 'story-battle'
   const [cpuEngine, setCpuEngine] = useState(null);
   const [gameState, setGameState] = useState(null);
   const [results, setResults] = useState(null);
@@ -29,6 +34,65 @@ function App() {
   const [hostId, setHostId] = useState(null);
   const [roomPlayers, setRoomPlayers] = useState([]);
   const [error, setError] = useState(null);
+
+  // Account (auth)
+  const [auth, setAuth] = useState(null); // { token, user }
+
+  // Story mode
+  const [storyProgress, setStoryProgress] = useState(defaultProgress());
+  const [storyEngine, setStoryEngine] = useState(null);
+  const [storyChapter, setStoryChapter] = useState(null);
+  const [storyResult, setStoryResult] = useState(null);
+
+  // ─── Restore auth + story progress ─────────────────────────
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('numerus_auth') || 'null');
+      if (saved?.token) {
+        setAuth(saved);
+        fetch(`${API}/api/auth/me`, { headers: { Authorization: `Bearer ${saved.token}` } })
+          .then((r) => r.json())
+          .then((data) => {
+            if (data.success && data.user) {
+              const updated = { token: saved.token, user: data.user };
+              setAuth(updated);
+              localStorage.setItem('numerus_auth', JSON.stringify(updated));
+            } else {
+              localStorage.removeItem('numerus_auth');
+              setAuth(null);
+            }
+          })
+          .catch(() => {});
+      }
+    } catch { /* ignore */ }
+
+    try {
+      const local = JSON.parse(localStorage.getItem(STORY_LOCAL_KEY) || 'null');
+      if (local) setStoryProgress({ ...defaultProgress(), ...local });
+    } catch { /* ignore */ }
+  }, []);
+
+  // When logged in, server profile is the source of truth for story progress
+  useEffect(() => {
+    if (!auth?.token) return;
+    fetch(`${API}/api/profile`, { headers: { Authorization: `Bearer ${auth.token}` } })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.success && data.user?.profile) {
+          const p = data.user.profile;
+          const merged = {
+            title: p.title || 'Aprendiz',
+            stars: p.stars || 0,
+            completed: p.completed || {},
+            gamesPlayed: p.gamesPlayed || 0,
+            wins: p.wins || 0
+          };
+          setStoryProgress(merged);
+          localStorage.setItem(STORY_LOCAL_KEY, JSON.stringify(merged));
+        }
+      })
+      .catch(() => {});
+  }, [auth?.token]);
 
   // Initialize socket
   useEffect(() => {
@@ -70,6 +134,25 @@ function App() {
     return () => newSocket.disconnect();
   }, []);
 
+  // ─── Account Actions ───────────────────────────────────────
+
+  const handleLoginSuccess = useCallback((token, user) => {
+    const data = { token, user };
+    setAuth(data);
+    localStorage.setItem('numerus_auth', JSON.stringify(data));
+  }, []);
+
+  const handleLogout = useCallback(() => {
+    if (auth?.token) {
+      fetch(`${API}/api/auth/logout`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${auth.token}` }
+      }).catch(() => {});
+    }
+    localStorage.removeItem('numerus_auth');
+    setAuth(null);
+  }, [auth]);
+
   // ─── Menu Actions ─────────────────────────────────────────
 
   const handleStartCPU = useCallback((difficulty) => {
@@ -89,9 +172,16 @@ function App() {
     setGameMode('lobby');
   }, []);
 
+  const handleStartStory = useCallback(() => {
+    setGameMode('story');
+  }, []);
+
+  // ─── Online Room Actions ───────────────────────────────────
+
   const handleCreateRoom = useCallback((callback) => {
     if (!socket) return;
-    socket.emit('create_room', {}, (response) => {
+    const name = (localStorage.getItem('numerus_player_name') || '').trim();
+    socket.emit('create_room', { name }, (response) => {
       if (response.success) {
         setRoomId(response.roomId);
         setPlayerId(response.playerId);
@@ -103,7 +193,8 @@ function App() {
 
   const handleJoinRoom = useCallback((id, callback) => {
     if (!socket) return;
-    socket.emit('join_room', { roomId: id }, (response) => {
+    const name = (localStorage.getItem('numerus_player_name') || '').trim();
+    socket.emit('join_room', { roomId: id, name }, (response) => {
       if (response.success) {
         setRoomId(response.roomId);
         setPlayerId(response.playerId);
@@ -126,11 +217,98 @@ function App() {
     socket.emit('game_action', { action }, callback);
   }, [socket]);
 
+  // ─── CPU / Story Actions ───────────────────────────────────
+
   const handleCPUAction = useCallback((action) => {
-    if (cpuEngine) {
-      cpuEngine.processHumanAction(action);
-    }
+    if (cpuEngine) cpuEngine.processHumanAction(action);
   }, [cpuEngine]);
+
+  // ─── Story Mode ────────────────────────────────────────────
+
+  const handleStoryFinished = useCallback((engine, chapter) => {
+    const resultsData = engine.getResults();
+    const rankings = resultsData?.rankings || [];
+    const won = rankings[0]?.id === 'human-player';
+    const myChips = rankings.find((r) => r.id === 'human-player')?.chips ?? 0;
+    const stars = won ? (myChips >= 16 ? 3 : myChips >= 8 ? 2 : 1) : 0;
+    const nextUnlocked = won && chapter.id < MAX_CHAPTERS;
+
+    const completed = { ...(storyProgress.completed || {}) };
+    if (won) completed[chapter.id] = Math.max(completed[chapter.id] || 0, stars);
+    const totalStars = Object.values(completed).reduce((s, n) => s + n, 0);
+    const title = STORY_TITLES[Math.min(Object.keys(completed).length, STORY_TITLES.length) - 1] || 'Aprendiz';
+    const nextProgress = {
+      ...storyProgress,
+      completed,
+      stars: totalStars,
+      title,
+      gamesPlayed: (storyProgress.gamesPlayed || 0) + 1,
+      wins: (storyProgress.wins || 0) + (won ? 1 : 0)
+    };
+
+    setStoryProgress(nextProgress);
+    localStorage.setItem(STORY_LOCAL_KEY, JSON.stringify(nextProgress));
+
+    // Sync to server when logged in
+    if (auth?.token) {
+      fetch(`${API}/api/story/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.token}` },
+        body: JSON.stringify({ chapterId: chapter.id, stars, won })
+      })
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.success && data.profile) {
+            const p = data.profile;
+            const serverProgress = {
+              title: p.title || title,
+              stars: p.stars || 0,
+              completed: p.completed || {},
+              gamesPlayed: p.gamesPlayed || 0,
+              wins: p.wins || 0
+            };
+            setStoryProgress(serverProgress);
+            localStorage.setItem(STORY_LOCAL_KEY, JSON.stringify(serverProgress));
+            setAuth((a) => (a ? { ...a, user: { ...a.user, profile: p } } : a));
+          }
+        })
+        .catch(() => {});
+    }
+
+    setStoryResult({ won, stars, chapter, myChips, nextUnlocked });
+  }, [storyProgress, auth]);
+
+  const handlePlayChapter = useCallback((chapter) => {
+    const engine = new CPUGameEngine(2, chapter.difficulty, {
+      humanName: auth?.user?.displayName || localStorage.getItem('numerus_player_name') || 'Você',
+      cpuNames: [chapter.master],
+      cpuChipsBonus: chapter.bonus
+    });
+    engine.onStateChange = (state) => {
+      setGameState(state);
+      if (state.finished) {
+        handleStoryFinished(engine, chapter);
+      }
+    };
+    engine.start();
+    setStoryEngine(engine);
+    setStoryChapter(chapter);
+    setStoryResult(null);
+    setGameState(null);
+    setGameMode('story-battle');
+  }, [auth, handleStoryFinished]);
+
+  const handleStoryAction = useCallback((action) => {
+    if (storyEngine) storyEngine.processHumanAction(action);
+  }, [storyEngine]);
+
+  const handleStoryToHub = useCallback(() => {
+    setStoryResult(null);
+    setStoryEngine(null);
+    setStoryChapter(null);
+    setGameState(null);
+    setGameMode('story');
+  }, []);
 
   const handleBackToMenu = useCallback(() => {
     // Leave the online room so the game isn't left hanging for the others
@@ -145,6 +323,9 @@ function App() {
     setPlayerId(null);
     setHostId(null);
     setRoomPlayers([]);
+    setStoryEngine(null);
+    setStoryChapter(null);
+    setStoryResult(null);
   }, [socket, gameMode]);
 
   // ─── Render ───────────────────────────────────────────────
@@ -165,6 +346,28 @@ function App() {
     );
   }
 
+  // Story chapter result
+  if (storyResult && gameMode === 'story-battle') {
+    return (
+      <div className="app">
+        <div className="header">
+          <h1>NUMERUS</h1>
+          <div className="subtitle">Master the Equation</div>
+        </div>
+        <StoryResult
+          result={storyResult}
+          onReplay={() => storyChapter && handlePlayChapter(storyChapter)}
+          onHub={handleStoryToHub}
+          onNext={() => {
+            if (!storyResult.nextUnlocked || !storyChapter) return;
+            const full = CHAPTERS.find((c) => c.id === storyChapter.id + 1);
+            if (full) handlePlayChapter(full);
+          }}
+        />
+      </div>
+    );
+  }
+
   // Results
   if (results) {
     return (
@@ -179,15 +382,33 @@ function App() {
   }
 
   // Game in progress
-  if (gameState && gameState.started && (gameMode === 'cpu' || gameMode === 'online')) {
+  if (gameState && gameState.started && (gameMode === 'cpu' || gameMode === 'online' || gameMode === 'story-battle')) {
     return (
       <div className="app">
         <GameBoard
           gameState={gameState}
-          playerId={gameMode === 'cpu' ? 'human-player' : playerId}
-          onAction={gameMode === 'cpu' ? handleCPUAction : handleOnlineAction}
+          playerId={gameMode === 'cpu' || gameMode === 'story-battle' ? 'human-player' : playerId}
+          onAction={gameMode === 'cpu' ? handleCPUAction : gameMode === 'story-battle' ? handleStoryAction : handleOnlineAction}
           onBackToMenu={handleBackToMenu}
-          isCPU={gameMode === 'cpu'}
+          isCPU={gameMode === 'cpu' || gameMode === 'story-battle'}
+        />
+      </div>
+    );
+  }
+
+  // Story hub
+  if (gameMode === 'story') {
+    return (
+      <div className="app">
+        <div className="header">
+          <h1>NUMERUS</h1>
+          <div className="subtitle">Master the Equation</div>
+        </div>
+        <StoryHub
+          progress={storyProgress}
+          user={auth?.user || null}
+          onBack={handleBackToMenu}
+          onPlay={handlePlayChapter}
         />
       </div>
     );
@@ -247,6 +468,10 @@ function App() {
             if (res.success) setGameMode('lobby');
           });
         }}
+        onStartStory={handleStartStory}
+        user={auth?.user || null}
+        onLoginSuccess={handleLoginSuccess}
+        onLogout={handleLogout}
       />
     </div>
   );
