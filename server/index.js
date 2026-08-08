@@ -14,6 +14,7 @@ const {
   checkRoundComplete,
   advanceRound,
   startGame,
+  calculateFinalResults,
   ROUNDS
 } = require('./game-logic');
 
@@ -46,6 +47,7 @@ function createRoom(roomId, settings = {}) {
   const room = {
     id: roomId,
     players: [],
+    host: null,
     game: null,
     settings: {
       maxPlayers: settings.maxPlayers || 6,
@@ -74,6 +76,41 @@ function advanceChained(gameState) {    // Auto-advance through rounds that are 
       console.warn('⚠️ advanceChained: guarda de segurança atingida em rodada', gameState.currentRound);
     }
     return true;
+}
+
+/**
+ * Remove a player from a room and handle all consequences:
+ * - Deletes the room if it becomes empty
+ * - Transfers host status to the first remaining player
+ * - If a game is running, ends it for the remaining players (abandonment)
+ */
+function handlePlayerLeave(room, roomId, playerId) {
+  const wasHost = room.host === playerId;
+  room.players = room.players.filter(p => p !== playerId);
+
+  if (room.players.length === 0) {
+    rooms.delete(roomId);
+    console.log(`🗑️ Room deleted: ${roomId}`);
+    return;
+  }
+
+  if (wasHost) room.host = room.players[0];
+
+  // If a game is running and someone abandons, finish it for the rest
+  if (room.game && room.game.started && !room.game.finished) {
+    calculateFinalResults(room.game);
+    room.game.finished = true;
+    io.to(roomId).emit('game_over', room.game.results);
+    broadcastGameState(roomId);
+    return;
+  }
+
+  io.to(roomId).emit('room_update', {
+    roomId,
+    players: room.players,
+    settings: room.settings,
+    host: room.host
+  });
 }
 
 function broadcastGameState(roomId) {
@@ -129,16 +166,18 @@ io.on('connection', (socket) => {
   socket.on('create_room', (data, callback) => {
     const roomId = data.roomId || `numerus-${Math.random().toString(36).substr(2, 6)}`;
     const room = createRoom(roomId, data.settings);
+    room.host = socket.id;
     room.players.push(socket.id);
     socket.join(roomId);
     currentRoom = roomId;
 
     console.log(`🏠 Room created: ${roomId} by ${socket.id}`);
-    callback({ success: true, roomId, playerId: socket.id });
+    callback({ success: true, roomId, playerId: socket.id, host: room.host });
     io.to(roomId).emit('room_update', {
       roomId,
       players: room.players,
-      settings: room.settings
+      settings: room.settings,
+      host: room.host
     });
   });
 
@@ -160,11 +199,12 @@ io.on('connection', (socket) => {
     currentRoom = data.roomId;
 
     console.log(`🚪 Player ${socket.id} joined room ${data.roomId}`);
-    callback({ success: true, roomId: data.roomId, playerId: socket.id });
+    callback({ success: true, roomId: data.roomId, playerId: socket.id, host: room.host });
     io.to(data.roomId).emit('room_update', {
       roomId: data.roomId,
       players: room.players,
-      settings: room.settings
+      settings: room.settings,
+      host: room.host
     });
   });
 
@@ -172,6 +212,12 @@ io.on('connection', (socket) => {
   socket.on('start_game', (data, callback) => {
     const room = getRoom(currentRoom);
     if (!room) return callback({ success: false, error: 'Sala não encontrada' });
+    if (room.host !== socket.id) {
+      return callback({ success: false, error: 'Apenas o anfitrião da sala pode iniciar o duelo' });
+    }
+    if (room.game && room.game.started) {
+      return callback({ success: false, error: 'O jogo já começou' });
+    }
     if (room.players.length < 2) {
       return callback({ success: false, error: 'Mínimo 2 jogadores' });
     }
@@ -222,6 +268,17 @@ io.on('connection', (socket) => {
     callback(result);
   });
 
+  // ─── Leave Room (voluntário) ─────────────────────────────
+  socket.on('leave_room', () => {
+    const room = getRoom(currentRoom);
+    if (!room) return;
+    // Leave the socket.io room FIRST so the leaver doesn't receive
+    // game_over/room_update broadcasts meant for the remaining players.
+    socket.leave(currentRoom);
+    handlePlayerLeave(room, currentRoom, socket.id);
+    currentRoom = null;
+  });
+
   // ─── Disconnect ───────────────────────────────────────────
   socket.on('disconnect', () => {
     console.log(`❌ Player disconnected: ${socket.id}`);
@@ -229,18 +286,7 @@ io.on('connection', (socket) => {
     if (currentRoom) {
       const room = getRoom(currentRoom);
       if (room) {
-        room.players = room.players.filter(p => p !== socket.id);
-        
-        if (room.players.length === 0) {
-          rooms.delete(currentRoom);
-          console.log(`🗑️ Room deleted: ${currentRoom}`);
-        } else {
-          io.to(currentRoom).emit('room_update', {
-            roomId: currentRoom,
-            players: room.players,
-            settings: room.settings
-          });
-        }
+        handlePlayerLeave(room, currentRoom, socket.id);
       }
     }
   });

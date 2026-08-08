@@ -26,6 +26,7 @@ function App() {
   // Online state
   const [roomId, setRoomId] = useState(null);
   const [playerId, setPlayerId] = useState(null);
+  const [hostId, setHostId] = useState(null);
   const [roomPlayers, setRoomPlayers] = useState([]);
   const [error, setError] = useState(null);
 
@@ -48,11 +49,17 @@ function App() {
 
     newSocket.on('room_update', (data) => {
       setRoomPlayers(data.players);
+      if (data.host) setHostId(data.host);
     });
 
     newSocket.on('game_state', (state) => {
       setGameState(state);
-      setResults(null);
+      // Don't clear results if this is the final state (game_over already fired)
+      if (!state?.finished) setResults(null);
+      // If the game started while we were still in the lobby, jump straight into the board
+      if (state?.started) {
+        setGameMode((prev) => (prev === 'lobby' ? 'online' : prev));
+      }
     });
 
     newSocket.on('game_over', (res) => {
@@ -88,6 +95,7 @@ function App() {
       if (response.success) {
         setRoomId(response.roomId);
         setPlayerId(response.playerId);
+        setHostId(response.host);
       }
       callback(response);
     });
@@ -99,6 +107,7 @@ function App() {
       if (response.success) {
         setRoomId(response.roomId);
         setPlayerId(response.playerId);
+        setHostId(response.host);
       }
       callback(response);
     });
@@ -124,14 +133,19 @@ function App() {
   }, [cpuEngine]);
 
   const handleBackToMenu = useCallback(() => {
+    // Leave the online room so the game isn't left hanging for the others
+    if (socket && (gameMode === 'online' || gameMode === 'lobby')) {
+      socket.emit('leave_room');
+    }
     setGameMode('menu');
     setGameState(null);
     setResults(null);
     setCpuEngine(null);
     setRoomId(null);
     setPlayerId(null);
+    setHostId(null);
     setRoomPlayers([]);
-  }, []);
+  }, [socket, gameMode]);
 
   // ─── Render ───────────────────────────────────────────────
 
@@ -190,6 +204,7 @@ function App() {
         <Lobby
           roomId={roomId}
           playerId={playerId}
+          host={hostId}
           players={roomPlayers}
           onCreateRoom={handleCreateRoom}
           onJoinRoom={handleJoinRoom}

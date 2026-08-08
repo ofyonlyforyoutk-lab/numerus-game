@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { SwordsIcon, DoorIcon, BackArrowIcon, GlobeIcon, BookIcon } from '../assets/Icons';
 import { sound } from '../utils/sound';
 
-function Lobby({ roomId, playerId, players, onCreateRoom, onJoinRoom, onStartGame, onBackToMenu, error }) {
+function Lobby({ roomId, playerId, host, players, onCreateRoom, onJoinRoom, onStartGame, onBackToMenu, error }) {
   const [joinId, setJoinId] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -57,8 +57,8 @@ function Lobby({ roomId, playerId, players, onCreateRoom, onJoinRoom, onStartGam
           </div>
           <div className="players-list">
             {players.map((p, i) => (
-              <span key={p} className="player-tag">
-                {p === playerId ? `✦ Você` : `Jogador ${i + 1}`}
+              <span key={p} className={`player-tag ${p === playerId ? 'me' : ''}`}>
+                {p === playerId ? '✦ Você' : p === host ? '✦ Anfitrião' : `Jogador ${i + 1}`}
               </span>
             ))}
           </div>
@@ -69,7 +69,7 @@ function Lobby({ roomId, playerId, players, onCreateRoom, onJoinRoom, onStartGam
             Aguardando outros jogadores...<br />
             Compartilhe o código: <strong>{roomId}</strong>
           </p>
-        ) : (
+        ) : playerId === host ? (
           <div className="lobby-buttons">
             <button
               className="btn btn-primary btn-glow"
@@ -80,6 +80,10 @@ function Lobby({ roomId, playerId, players, onCreateRoom, onJoinRoom, onStartGam
               {loading ? 'Iniciando...' : (<><SwordsIcon size={20} /> Iniciar Duelo</>)}
             </button>
           </div>
+        ) : (
+          <p style={{ textAlign: 'center', color: '#c9a84c', fontStyle: 'italic' }}>
+            Aguardando o anfitrião iniciar o duelo...
+          </p>
         )}
 
         <div className="lobby-buttons" style={{ marginTop: '1.5rem' }}>

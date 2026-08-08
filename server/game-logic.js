@@ -746,6 +746,7 @@ module.exports = {
   checkRoundComplete,
   advanceRound,
   startGame,
+  calculateFinalResults,
   evaluateEquation,
   ROUNDS,
   DESTINIES,

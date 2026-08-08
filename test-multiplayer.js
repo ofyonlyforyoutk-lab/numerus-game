@@ -33,7 +33,7 @@ async function main() {
   console.log(`\n=== TESTE MULTIPLAYER COMPLETO (${URL}) ===\n`);
 
   const p1 = await makePlayer('Jogador 1');
-  const p2 = await makePlayer('Jogador 2'); const p3 = await makePlayer('Jogador 3');
+  const p2 = await makePlayer('Jogador 2');
   console.log('  ✅ Dois jogadores conectados');
 
   // Track latest public game state per player
@@ -49,10 +49,15 @@ async function main() {
 
   const joinRes = await new Promise(resolve => p2.socket.emit('join_room', { roomId }, resolve));
   assert(joinRes.success, 'Jogador 2 entrou na sala');
+  assert(joinRes.host === p1.socket.id, 'Anfitrião informado ao entrar na sala');
 
-  // Start game
+  // Only the host can start the game — the joiner must be rejected
+  const nonHostStart = await new Promise(resolve => p2.socket.emit('start_game', {}, resolve));
+  assert(!nonHostStart.success && /anfitri/i.test(nonHostStart.error || ''), 'Não-anfitrião não pode iniciar o duelo');
+
+  // Start game (by host)
   const startRes = await new Promise(resolve => p1.socket.emit('start_game', {}, resolve));
-  assert(startRes.success, 'Jogo iniciado');
+  assert(startRes.success, 'Jogo iniciado pelo anfitrião');
 
   await wait(700);
   assert(p1.latest && p2.latest, 'Ambos receberam game_state (rodada 1 - auto-avanço)');
