@@ -2408,3 +2408,90 @@ body::before {
     padding: 1.8rem 1.3rem 1.4rem;
   }
 }
+/* ═══════════════════════════════════════════════════════════════
+   CO-OP STORY (banner + chapter actions)
+   ═══════════════════════════════════════════════════════════════ */
+
+.coop-banner {
+  padding: 1rem 1.3rem;
+  margin-bottom: 1.2rem;
+  background: linear-gradient(135deg, rgba(74, 42, 106, 0.15), rgba(20, 12, 8, 0.6));
+  border: 1px solid rgba(138, 90, 192, 0.35);
+  border-radius: 8px;
+  text-align: center;
+  animation: slideInUp 0.4s ease-out;
+}
+
+.coop-banner-title {
+  font-family: 'Cinzel', serif;
+  color: var(--gold);
+  font-size: 1.1rem;
+  justify-content: center;
+}
+
+.coop-banner-master {
+  color: var(--purple-light);
+  font-size: 0.95rem;
+  margin-top: 0.3rem;
+}
+
+.coop-banner-sub {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  font-style: italic;
+  margin-top: 0.4rem;
+}
+
+.chapter-actions {
+  display: flex;
+  gap: 0.6rem;
+  margin-left: auto;
+}
+
+.chapter-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.9rem;
+  background: rgba(201, 168, 76, 0.1);
+  border: 1px solid rgba(201, 168, 76, 0.35);
+  border-radius: 20px;
+  font-family: 'Cinzel', serif;
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gold-light);
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.chapter-action:hover {
+  background: rgba(201, 168, 76, 0.2);
+  border-color: var(--gold);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 14px rgba(201, 168, 76, 0.2);
+}
+
+.chapter-action.coop {
+  background: rgba(74, 138, 181, 0.12);
+  border-color: rgba(74, 138, 181, 0.4);
+  color: var(--blue-light);
+}
+
+.chapter-action.coop:hover {
+  background: rgba(74, 138, 181, 0.22);
+  border-color: var(--blue-light);
+  box-shadow: 0 4px 14px rgba(74, 138, 181, 0.25);
+}
+
+@media (max-width: 640px) {
+  .chapter-actions {
+    margin-left: 0;
+    justify-content: center;
+  }
+  .chapter-foot {
+    flex-direction: column;
+    gap: 0.6rem;
+    align-items: center;
+  }
+}

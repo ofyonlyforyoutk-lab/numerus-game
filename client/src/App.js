@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { io } from 'socket.io-client';
 import AnimatedMenu from './components/AnimatedMenu';
 import Lobby from './components/Lobby';
@@ -34,6 +34,8 @@ function App() {
   const [hostId, setHostId] = useState(null);
   const [roomPlayers, setRoomPlayers] = useState([]);
   const [error, setError] = useState(null);
+  const [roomMode, setRoomMode] = useState('online'); // 'online' | 'story'
+  const [roomChapter, setRoomChapter] = useState(null);
 
   // Account (auth)
   const [auth, setAuth] = useState(null); // { token, user }
@@ -43,6 +45,7 @@ function App() {
   const [storyEngine, setStoryEngine] = useState(null);
   const [storyChapter, setStoryChapter] = useState(null);
   const [storyResult, setStoryResult] = useState(null);
+  const [coopResult, setCoopResult] = useState(null);
 
   // ─── Restore auth + story progress ─────────────────────────
   useEffect(() => {
@@ -72,8 +75,8 @@ function App() {
     } catch { /* ignore */ }
   }, []);
 
-  // When logged in, server profile is the source of truth for story progress
-  useEffect(() => {
+  // Refresh story progress from the server (source of truth when logged in)
+  const refreshProfile = useCallback(() => {
     if (!auth?.token) return;
     fetch(`${API}/api/profile`, { headers: { Authorization: `Bearer ${auth.token}` } })
       .then((r) => r.json())
@@ -89,10 +92,26 @@ function App() {
           };
           setStoryProgress(merged);
           localStorage.setItem(STORY_LOCAL_KEY, JSON.stringify(merged));
+          setAuth((a) => (a ? { ...a, user: { ...a.user, profile: p } } : a));
         }
       })
       .catch(() => {});
   }, [auth?.token]);
+
+  // Keep refs so socket handlers (registered once) always use the latest values
+  const refreshProfileRef = useRef(refreshProfile);
+  useEffect(() => {
+    refreshProfileRef.current = refreshProfile;
+  }, [refreshProfile]);
+
+  const storyProgressRef = useRef(storyProgress);
+  useEffect(() => {
+    storyProgressRef.current = storyProgress;
+  }, [storyProgress]);
+
+  useEffect(() => {
+    refreshProfile();
+  }, [refreshProfile]);
 
   // Initialize socket
   useEffect(() => {
@@ -114,6 +133,8 @@ function App() {
     newSocket.on('room_update', (data) => {
       setRoomPlayers(data.players);
       if (data.host) setHostId(data.host);
+      setRoomMode(data.mode === 'story' ? 'story' : 'online');
+      setRoomChapter(data.chapterId ? CHAPTERS.find((c) => c.id === Number(data.chapterId)) || null : null);
     });
 
     newSocket.on('game_state', (state) => {
@@ -122,12 +143,38 @@ function App() {
       if (!state?.finished) setResults(null);
       // If the game started while we were still in the lobby, jump straight into the board
       if (state?.started) {
-        setGameMode((prev) => (prev === 'lobby' ? 'online' : prev));
+        setGameMode((prev) => (prev === 'lobby' ? (state.mode === 'story' ? 'coop' : 'online') : prev));
       }
     });
 
     newSocket.on('game_over', (res) => {
-      setResults(res);
+      if (res?.storyResult) {
+        setCoopResult(res);
+        setResults(null);
+        refreshProfileRef.current(); // awards happened server-side; refresh my progress
+        // Guests (no account) still keep their progress locally, like solo mode
+        const sr = res.storyResult;
+        if (sr.won && sr.chapterId) {
+          const prev = storyProgressRef.current;
+          const completed = { ...(prev.completed || {}) };
+          const stars = Math.max(completed[sr.chapterId] || 0, sr.stars || 1);
+          completed[sr.chapterId] = stars;
+          const totalStars = Object.values(completed).reduce((s, n) => s + n, 0);
+          const title = STORY_TITLES[Math.min(Object.keys(completed).length, STORY_TITLES.length) - 1] || 'Aprendiz';
+          const next = {
+            ...prev,
+            completed,
+            stars: totalStars,
+            title,
+            gamesPlayed: (prev.gamesPlayed || 0) + 1,
+            wins: (prev.wins || 0) + 1
+          };
+          setStoryProgress(next);
+          localStorage.setItem(STORY_LOCAL_KEY, JSON.stringify(next));
+        }
+      } else {
+        setResults(res);
+      }
     });
 
     setSocket(newSocket);
@@ -176,12 +223,51 @@ function App() {
     setGameMode('story');
   }, []);
 
+  // ─── Co-op Story Room ─────────────────────────────────────
+
+  const handleStartCoop = useCallback((chapter, callback) => {
+    if (!socket) return;
+    const name = (localStorage.getItem('numerus_player_name') || '').trim();
+    socket.emit('create_room', { name, token: auth?.token || null, mode: 'story', chapterId: chapter.id }, (response) => {
+      if (response.success) {
+        setRoomId(response.roomId);
+        setPlayerId(response.playerId);
+        setHostId(response.host);
+        setRoomMode('story');
+        setRoomChapter(chapter);
+      }
+      callback && callback(response);
+    });
+  }, [socket, auth]);
+
+  // Recreate a co-op room (revanche / next chapter) — only meaningful for the host
+  const startCoopRoom = useCallback((chapter) => {
+    if (!socket) return;
+    socket.emit('leave_room');
+    handleStartCoop(chapter, () => {
+      setCoopResult(null);
+      setGameState(null);
+      setResults(null);
+      setGameMode('lobby');
+    });
+  }, [socket, handleStartCoop]);
+
+  const handleCoopToHub = useCallback(() => {
+    if (socket) socket.emit('leave_room');
+    setCoopResult(null);
+    setRoomMode('online');
+    setRoomChapter(null);
+    setGameState(null);
+    setResults(null);
+    setGameMode('story');
+  }, [socket]);
+
   // ─── Online Room Actions ───────────────────────────────────
 
   const handleCreateRoom = useCallback((callback) => {
     if (!socket) return;
     const name = (localStorage.getItem('numerus_player_name') || '').trim();
-    socket.emit('create_room', { name }, (response) => {
+    socket.emit('create_room', { name, token: auth?.token || null }, (response) => {
       if (response.success) {
         setRoomId(response.roomId);
         setPlayerId(response.playerId);
@@ -189,12 +275,12 @@ function App() {
       }
       callback(response);
     });
-  }, [socket]);
+  }, [socket, auth]);
 
   const handleJoinRoom = useCallback((id, callback) => {
     if (!socket) return;
     const name = (localStorage.getItem('numerus_player_name') || '').trim();
-    socket.emit('join_room', { roomId: id, name }, (response) => {
+    socket.emit('join_room', { roomId: id, name, token: auth?.token || null }, (response) => {
       if (response.success) {
         setRoomId(response.roomId);
         setPlayerId(response.playerId);
@@ -202,7 +288,7 @@ function App() {
       }
       callback(response);
     });
-  }, [socket]);
+  }, [socket, auth]);
 
   const handleStartOnlineGame = useCallback((callback) => {
     if (!socket) return;
@@ -312,7 +398,7 @@ function App() {
 
   const handleBackToMenu = useCallback(() => {
     // Leave the online room so the game isn't left hanging for the others
-    if (socket && (gameMode === 'online' || gameMode === 'lobby')) {
+    if (socket && (gameMode === 'online' || gameMode === 'lobby' || gameMode === 'coop')) {
       socket.emit('leave_room');
     }
     setGameMode('menu');
@@ -323,6 +409,9 @@ function App() {
     setPlayerId(null);
     setHostId(null);
     setRoomPlayers([]);
+    setRoomMode('online');
+    setRoomChapter(null);
+    setCoopResult(null);
     setStoryEngine(null);
     setStoryChapter(null);
     setStoryResult(null);
@@ -342,6 +431,39 @@ function App() {
           <div className="loading-emblem">N</div>
           <div className="loading-text">Preparando o Códice...</div>
         </div>
+      </div>
+    );
+  }
+
+  // Co-op chapter result
+  if (coopResult && gameMode === 'coop') {
+    const sr = coopResult.storyResult || {};
+    const chapter = CHAPTERS.find((c) => c.id === Number(sr.chapterId)) || null;
+    const isHost = playerId === hostId;
+    return (
+      <div className="app">
+        <div className="header">
+          <h1>NUMERUS</h1>
+          <div className="subtitle">Master the Equation</div>
+        </div>
+        <StoryResult
+          coop
+          isHost={isHost}
+          result={{
+            won: sr.won,
+            stars: sr.stars,
+            chapter,
+            myChips: sr.chips,
+            nextUnlocked: sr.won && chapter && chapter.id < MAX_CHAPTERS
+          }}
+          onReplay={isHost ? () => chapter && startCoopRoom(chapter) : null}
+          onHub={handleCoopToHub}
+          onNext={isHost ? () => {
+            if (chapter && chapter.id < MAX_CHAPTERS) {
+              startCoopRoom(CHAPTERS.find((c) => c.id === chapter.id + 1));
+            }
+          } : null}
+        />
       </div>
     );
   }
@@ -382,7 +504,7 @@ function App() {
   }
 
   // Game in progress
-  if (gameState && gameState.started && (gameMode === 'cpu' || gameMode === 'online' || gameMode === 'story-battle')) {
+  if (gameState && gameState.started && (gameMode === 'cpu' || gameMode === 'online' || gameMode === 'story-battle' || gameMode === 'coop')) {
     return (
       <div className="app">
         <GameBoard
@@ -409,6 +531,7 @@ function App() {
           user={auth?.user || null}
           onBack={handleBackToMenu}
           onPlay={handlePlayChapter}
+          onPlayCoop={handleStartCoop}
         />
       </div>
     );
@@ -427,6 +550,8 @@ function App() {
           playerId={playerId}
           host={hostId}
           players={roomPlayers}
+          mode={roomMode}
+          chapter={roomChapter}
           onCreateRoom={handleCreateRoom}
           onJoinRoom={handleJoinRoom}
           onStartGame={handleStartOnlineGame}

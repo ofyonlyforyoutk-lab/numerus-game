@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { SwordsIcon, DoorIcon, BackArrowIcon, GlobeIcon, BookIcon, ScrollIcon } from '../assets/Icons';
 import { sound } from '../utils/sound';
 
-function Lobby({ roomId, playerId, host, players, onCreateRoom, onJoinRoom, onStartGame, onBackToMenu, error }) {
+function Lobby({ roomId, playerId, host, players, mode, chapter, onCreateRoom, onJoinRoom, onStartGame, onBackToMenu, error }) {
   const [joinId, setJoinId] = useState('');
   const [loading, setLoading] = useState(false);
   const [name, setName] = useState(() => localStorage.getItem('numerus_player_name') || '');
@@ -50,16 +50,29 @@ function Lobby({ roomId, playerId, host, players, onCreateRoom, onJoinRoom, onSt
   };
 
   if (roomId) {
+    const isStory = mode === 'story';
     return (
       <div className="lobby animate-in">
         <h2>Sala de Espera</h2>
+
+        {isStory && chapter && (
+          <div className="coop-banner">
+            <div className="coop-banner-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <SwordsIcon size={18} /> Capítulo {chapter.id} — {chapter.name}
+            </div>
+            <div className="coop-banner-master">Mestre: {chapter.master}</div>
+            <div className="coop-banner-sub">
+              Até 4 aliados contra o chefe. Todos do grupo que estiverem com conta recebem o progresso.
+            </div>
+          </div>
+        )}
 
         <div className="room-info">
           <div className="room-id">
             Código da Sala: <strong>{roomId}</strong>
           </div>
           <div className="player-count">
-            {players.length} jogador(es) na sala
+            {isStory ? `${players.length}/4 aliado(s)` : `${players.length} jogador(es) na sala`}
           </div>
           <div className="players-list">
             {players.map((p) => (
@@ -75,7 +88,25 @@ function Lobby({ roomId, playerId, host, players, onCreateRoom, onJoinRoom, onSt
           )}
         </div>
 
-        {players.length < 2 ? (
+        {isStory ? (
+          playerId === host ? (
+            <div className="lobby-buttons">
+              <button
+                className="btn btn-primary btn-glow"
+                onClick={handleStart}
+                disabled={loading}
+                style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+              >
+                {loading ? 'Iniciando...' : (<><SwordsIcon size={20} /> Iniciar Batalha{players.length < 2 ? ' (sozinho)' : ''}</>)}
+              </button>
+            </div>
+          ) : (
+            <p style={{ textAlign: 'center', color: '#c9a84c', fontStyle: 'italic' }}>
+              Aguardando o anfitrião iniciar a batalha...<br />
+              Compartilhe o código: <strong>{roomId}</strong>
+            </p>
+          )
+        ) : players.length < 2 ? (
           <p style={{ textAlign: 'center', color: '#c9a84c', fontStyle: 'italic' }}>
             Aguardando outros jogadores...<br />
             Compartilhe o código: <strong>{roomId}</strong>

@@ -36,6 +36,9 @@ const DESTINIES = {
   DOUBLE: 'duplo_juramento'    // Both I and XX
 };
 
+// CPU boss player id (co-op story mode)
+const CPU_BOSS_ID = 'cpu-boss';
+
 // ═══════════════════════════════════════════════════════════════
 // DECK CREATION
 // ═══════════════════════════════════════════════════════════════
@@ -234,7 +237,7 @@ function evaluateWithPrecedence(tokens) {
 // GAME STATE CREATION
 // ═══════════════════════════════════════════════════════════════
 
-function createGameState(roomId, playerIds, settings = {}, names = {}) {
+function createGameState(roomId, playerIds, settings = {}, names = {}, cpu = null) {
   const deck = shuffleDeck(createDeck());
   
   const players = {};
@@ -258,12 +261,39 @@ function createGameState(roomId, playerIds, settings = {}, names = {}) {
     };
   }
 
+  const playerOrder = [...playerIds];
+
+  // Optional CPU boss (co-op story mode): { name, difficulty, bonus }
+  if (cpu) {
+    const cpuId = CPU_BOSS_ID;
+    players[cpuId] = {
+      id: cpuId,
+      name: cpu.name || 'O Códice Vivo',
+      chips: STARTING_CHIPS + (cpu.bonus || 0),
+      hand: [],
+      faceDown: [],
+      operations: [],
+      specials: [],
+      equation: [],
+      destiny: null,
+      seal: null,
+      bet: 0,
+      totalBet: 0,
+      folded: false,
+      revealed: false,
+      equationResult: null,
+      isCPU: true,
+      difficulty: cpu.difficulty || 'estrategista'
+    };
+    playerOrder.push(cpuId);
+  }
+
   return {
     id: roomId,
     deck: deck,
     discardPile: [],
     players: players,
-    playerOrder: [...playerIds],
+    playerOrder: playerOrder,
     currentRound: 0,
     currentPhase: 'waiting', // waiting, playing, betting, equation, reveal, judgment, finished
     bettingRound: 0,
@@ -718,7 +748,8 @@ function calculateFinalResults(gameState) {
       chips: p.chips,
       destiny: p.destiny,
       equationResult: p.equationResult,
-      position: i + 1
+      position: i + 1,
+      isCPU: !!p.isCPU
     }))
   };
 }
@@ -729,13 +760,201 @@ function calculateFinalResults(gameState) {
 
 function startGame(gameState) {
   if (gameState.started) return false;
-  if (Object.keys(gameState.players).length < 2) return false;
+  if (Object.keys(gameState.players).length < 1) return false;
   
   gameState.started = true;
   gameState.currentRound = 0;
   gameState.log.push({ action: '=== O Despertar ===' });
   
   return true;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CPU BOSS AI (co-op story mode)
+// ═══════════════════════════════════════════════════════════════
+
+function shuffleCards(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+/** Build a structurally valid equation using the available cards. */
+function buildValidEquation(numbers, ops, specials) {
+  const sqrtCards = specials.filter(s => s.operation === 'sqrt');
+  const multCards = specials.filter(s => s.operation === 'multiply');
+  const restSpecials = specials.filter(s => s.operation !== 'sqrt' && s.operation !== 'multiply');
+
+  const equation = [];
+  const nums = shuffleCards([...numbers]);
+  const basicOps = shuffleCards([...ops]);
+  const allOps = [...basicOps, ...multCards.map(m => ({ ...m, type: 'operation', operation: 'multiply' }))];
+  const sqrtQueue = [...sqrtCards];
+
+  let numIdx = 0, opIdx = 0, lastWasNumber = false;
+  const slotCount = numbers.length + ops.length + specials.length;
+
+  for (let i = 0; i < slotCount && numIdx < nums.length; i++) {
+    if (!lastWasNumber) {
+      if (sqrtQueue.length > 0 && numIdx < nums.length) {
+        equation.push(sqrtQueue.shift());
+        equation.push(nums[numIdx++]);
+        lastWasNumber = true;
+      } else {
+        equation.push(nums[numIdx++]);
+        lastWasNumber = true;
+      }
+    } else {
+      if (allOps.length > 0) {
+        equation.push(allOps.pop());
+        lastWasNumber = false;
+      } else if (numIdx < nums.length) {
+        equation.push(nums[numIdx++]);
+      }
+    }
+  }
+
+  for (const s of [...restSpecials, ...sqrtQueue]) equation.push(s);
+
+  return equation;
+}
+
+/** Count which cards the boss must use, to validate its equation.
+ * player.hand already contains operations and specials (same card objects). */
+function usesAllCards(equation, player) {
+  const eqIds = new Set(equation.map(c => c.id));
+  const need = player.hand.map(c => c.id);
+  if (eqIds.size !== need.length) return false;
+  for (const id of need) if (!eqIds.has(id)) return false;
+  return true;
+}
+
+/** CPU picks an equation close to its target, trying many permutations. */
+function cpuDecide(destiny, hand, difficulty) {
+  const numbers = hand.filter(c => c.type === 'number');
+  const ops = hand.filter(c => c.type === 'operation');
+  const specials = hand.filter(c => c.type === 'special');
+  const target = destiny === 'simplicidade' ? 1 : 20;
+
+  let equation = buildValidEquation(numbers, ops, specials);
+  let bestResult = evaluateEquation(equation);
+  let bestDistance = bestResult && bestResult.valid !== false ? Math.abs(bestResult.result - target) : Infinity;
+
+  const attempts = difficulty === 'magno' ? 300 :
+                   difficulty === 'arquimestre' ? 150 :
+                   difficulty === 'mestre' ? 80 :
+                   difficulty === 'estrategista' ? 30 : 8;
+
+  for (let i = 0; i < attempts; i++) {
+    const candidate = buildValidEquation(numbers, ops, specials);
+    const res = evaluateEquation(candidate);
+    if (res.valid) {
+      const dist = Math.abs(res.result - target);
+      if (dist < bestDistance) {
+        bestDistance = dist;
+        equation = candidate;
+      }
+    }
+  }
+
+  return equation;
+}
+
+function pickCPUDestiny(cpu, difficulty) {
+  const numbers = cpu.hand.filter(c => c.type === 'number');
+  const hasSqrt = cpu.hand.some(c => c.type === 'special' && c.operation === 'sqrt');
+  const hasHigh = numbers.some(c => c.value >= 7);
+  const hasLow = numbers.some(c => c.value <= 3);
+  const avg = numbers.length ? numbers.reduce((s, c) => s + c.value, 0) / numbers.length : 5;
+
+  const smart = difficulty === 'magno' || difficulty === 'arquimestre' || difficulty === 'mestre';
+  if (!smart) return Math.random() > 0.5 ? 'simplicidade' : 'grandeza';
+  if (hasSqrt && hasLow) return 'simplicidade';
+  if (hasHigh && !hasLow) return 'grandeza';
+  return avg <= 5 ? 'simplicidade' : 'grandeza';
+}
+
+/** The boss submits its equation for round 5 (never stalls the game). */
+function submitCPUEstimation(gameState, cpu, difficulty) {
+  const destiny = cpu.pendingDestiny || pickCPUDestiny(cpu, difficulty);
+  cpu.pendingDestiny = destiny;
+  const equation = cpuDecide(destiny, cpu.hand, difficulty);
+  const ev = evaluateEquation(equation);
+  if (ev.valid && usesAllCards(equation, cpu)) {
+    cpu.equation = equation;
+    cpu.equationResult = ev.result;
+  } else {
+    // Fallback so the game never stalls on the boss (poor result = likely defeat)
+    cpu.equation = equation;
+    cpu.equationResult = ev.valid ? ev.result : (destiny === 'simplicidade' ? 99 : -99);
+  }
+  gameState.log.push({ round: 5, player: cpu.id, action: `${cpu.name} construiu equação = ${cpu.equationResult}` });
+}
+
+/** The boss performs its action(s) for the current round. */
+function executeCPUAction(gameState, cpuId, difficulty) {
+  const cpu = gameState.players[cpuId];
+  if (!cpu || cpu.folded) return;
+  const round = gameState.currentRound;
+
+  switch (round) {
+    case 0:
+      executeRoundAction(gameState, cpuId, { type: 'deal_operations' });
+      break;
+    case 1:
+      executeRoundAction(gameState, cpuId, { type: 'draw_face_down' });
+      executeRoundAction(gameState, cpuId, { type: 'bet', amount: Math.max(1, Math.floor(cpu.chips * 0.1)) });
+      break;
+    case 2:
+      executeRoundAction(gameState, cpuId, { type: 'draw_face_up' });
+      break;
+    case 3:
+    case 6:
+      if (cpu.chips > 3 && Math.random() > 0.3) {
+        executeRoundAction(gameState, cpuId, { type: 'bet', amount: Math.floor(cpu.chips * 0.15) });
+      } else {
+        executeRoundAction(gameState, cpuId, { type: 'check' });
+      }
+      break;
+    case 4:
+      executeRoundAction(gameState, cpuId, { type: 'draw_face_up' });
+      break;
+    case 5:
+      submitCPUEstimation(gameState, cpu, difficulty);
+      break;
+    case 7:
+      executeRoundAction(gameState, cpuId, { type: 'choose_destiny', destiny: cpu.pendingDestiny || pickCPUDestiny(cpu, difficulty) });
+      break;
+    case 8:
+      executeRoundAction(gameState, cpuId, { type: 'reveal' });
+      break;
+  }
+}
+
+/** All CPU players act for the current round. */
+function processCPUTurns(gameState, difficulty) {
+  for (const id of gameState.playerOrder) {
+    if (gameState.players[id]?.isCPU) {
+      executeCPUAction(gameState, id, difficulty || 'estrategista');
+    }
+  }
+}
+
+/**
+ * Co-op story result: the group wins when the best human finishes above the boss.
+ * Stars depend on the best human's remaining chips.
+ */
+function calculateStoryResult(gameState) {
+  const rankings = gameState.results?.rankings || [];
+  const boss = rankings.find(r => r.isCPU);
+  const won = boss ? boss.position !== 1 : true;
+  const bestHuman = rankings.filter(r => !r.isCPU).sort((a, b) => a.position - b.position)[0];
+  const chips = bestHuman?.chips ?? 0;
+  const stars = won ? (chips >= 16 ? 3 : chips >= 8 ? 2 : 1) : 0;
+  return { won, stars, chips, bossPosition: boss ? boss.position : null };
 }
 
 module.exports = {
@@ -747,10 +966,13 @@ module.exports = {
   advanceRound,
   startGame,
   calculateFinalResults,
+  calculateStoryResult,
+  processCPUTurns,
   evaluateEquation,
   ROUNDS,
   DESTINIES,
   STARTING_CHIPS,
+  CPU_BOSS_ID,
   isNumberCard,
   isSpecialCard,
   isOperationCard

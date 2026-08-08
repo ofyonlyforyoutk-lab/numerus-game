@@ -12,7 +12,7 @@ function Stars({ value, max = 3 }) {
   );
 }
 
-function StoryResult({ result, onReplay, onHub, onNext }) {
+function StoryResult({ result, coop, isHost, onReplay, onHub, onNext }) {
   const { won, stars, chapter, myChips, nextUnlocked } = result;
 
   return (
@@ -23,11 +23,15 @@ function StoryResult({ result, onReplay, onHub, onNext }) {
         </div>
 
         <h2 className="story-result-title">
-          {won ? 'Círculo Conquistado!' : 'O Círculo Resistiu'}
+          {coop ? (won ? 'O Grupo Conquistou o Círculo!' : 'O Grupo Sucumbiu...') : (won ? 'Círculo Conquistado!' : 'O Círculo Resistiu')}
         </h2>
 
-        <p className="story-result-chapter">{chapter.name}</p>
-        <p className="story-result-master">vs {chapter.master}</p>
+        {chapter && (
+          <>
+            <p className="story-result-chapter">{chapter.name}</p>
+            <p className="story-result-master">vs {chapter.master}</p>
+          </>
+        )}
 
         {won ? (
           <>
@@ -35,20 +39,32 @@ function StoryResult({ result, onReplay, onHub, onNext }) {
             <p className="story-result-stars-text">
               {stars === 3 ? 'Desempenho lendário!' : stars === 2 ? 'Grande vitória!' : 'Vitória! Termine com mais fichas para ganhar mais estrelas.'}
             </p>
+            {coop && (
+              <p className="story-result-stars-text" style={{ color: 'var(--gold-light)' }}>
+                O progresso foi salvo para todos os aliados com conta.
+              </p>
+            )}
             <div className="story-result-chips">
               <CoinStackIcon size={22} /> {myChips} fichas restantes
             </div>
           </>
         ) : (
           <p className="story-result-stars-text">
-            O Mestre foi implacável desta vez. Estude sua equação, ajuste sua aposta e tente novamente.
+            {coop
+              ? 'O Mestre foi implacável com o grupo. Reúnam-se e tentem novamente — juntos são mais fortes.'
+              : 'O Mestre foi implacável desta vez. Estude sua equação, ajuste sua aposta e tente novamente.'}
           </p>
         )}
 
-        <blockquote className="story-quote">"{chapter.quote}"</blockquote>
+        {chapter?.quote && <blockquote className="story-quote">"{chapter.quote}"</blockquote>}
 
         <div className="story-result-buttons">
-          {won && nextUnlocked && (
+          {coop && !isHost && (
+            <p className="story-result-stars-text" style={{ width: '100%' }}>
+              O anfitrião pode abrir uma nova batalha.
+            </p>
+          )}
+          {won && nextUnlocked && onNext && (
             <button
               className="btn btn-primary btn-glow"
               onClick={() => { sound.destiny(); onNext(); }}
@@ -57,13 +73,15 @@ function StoryResult({ result, onReplay, onHub, onNext }) {
               <MapIcon size={18} /> Próximo Círculo
             </button>
           )}
-          <button
-            className="btn btn-secondary"
-            onClick={() => { sound.click(); onReplay(); }}
-            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
-          >
-            <SwordsIcon size={18} /> Revanche
-          </button>
+          {onReplay && (
+            <button
+              className="btn btn-secondary"
+              onClick={() => { sound.click(); onReplay(); }}
+              style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+            >
+              <SwordsIcon size={18} /> {coop ? 'Nova Batalha' : 'Revanche'}
+            </button>
+          )}
           <button
             className="btn btn-secondary"
             onClick={() => { sound.click(); onHub(); }}
